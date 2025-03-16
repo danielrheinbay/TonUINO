@@ -127,10 +127,9 @@ def textToSpeech(text, targetFile, lang='de', useAmazon=False, useGoogleKey=None
             f.write(mp3Data)
     elif useElevenLabsKey:
         # Use ElevenLabs for TTS
-        elevenlabs_url = "https://api.elevenlabs.io/v1/text-to-speech/uvysWDLbKpA4XvpD3GI6"
+        elevenlabs_url = "https://api.elevenlabs.io/v1/text-to-speech/" + elevenlabsVoiceByLang[lang]
         payload = {
             "text": text,
-            "voice_settings": {"stability": 0.5, "similarity_boost": 0.7},
             "model_id": "eleven_multilingual_v2"
         }
         headers = {
