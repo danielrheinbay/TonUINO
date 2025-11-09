@@ -43,6 +43,16 @@ amazonVoiceByLang = {
     'es': 'Lucia',
     'it': 'Carla'
 }
+edgeVoiceByLang = {
+    # See: https://speech.platform.bing.com/consumer/speech/synthesize/readaloud/voices/list?trustedclienttoken=6A5AA1D4EAFF4E9FB37E23D68491D6F4
+    'de': 'de-DE-KatjaNeural',
+    'en': 'en-US-AriaNeural',
+    'fr': 'fr-FR-DeniseNeural',
+    'nl': 'nl-NL-ColetteNeural',
+    'es': 'es-ES-ElviraNeural',
+    'cz': 'cs-CZ-VlastaNeural',
+    'it': 'it-IT-ElsaNeural'
+}
 
 
 textToSpeechDescription = """
@@ -50,20 +60,22 @@ The following text-to-speech engines are supported:
 - With `--use-say` the text-to-speech engine of MacOS is used (command `say`).
 - With `--use-amazon` Amazon Polly is used. Requires the AWS CLI to be installed and configured. See: https://aws.amazon.com/cli/
 - With `--use-google-key=ABCD` Google text-to-speech is used. See: https://cloud.google.com/text-to-speech/
+- With `--use-edge` Microsoft Edge TTS is used. Requires `edge-tts` package: `pip install edge-tts`
 
-Amazon Polly sounds best, Google text-to-speech is second, MacOS `say` sounds worst.'
+Amazon Polly sounds best, Google text-to-speech is second, Edge TTS is a good free alternative, MacOS `say` sounds worst.
 """.strip()
 
 def addArgumentsToArgparser(argparser):
     argparser.add_argument('--lang', choices=['de', 'en', 'fr', 'nl', 'es', 'cz', 'it'], default='de', help='The language (default: de)')
     argparser.add_argument('--use-say', action='store_true', default=None, help="If set, the MacOS tool `say` will be used.")
-    argparser.add_argument('--use-amazon', action='store_true', default=None, help="If set, Amazon Polly is used. If missing the MacOS tool `say` will be used.")
+    argparser.add_argument('--use-amazon', action='store_true', default=None, help="If set, Amazon Polly is used.")
     argparser.add_argument('--use-google-key', type=str, default=None, help="The API key of the Google text-to-speech account to use.")
+    argparser.add_argument('--use-edge', action='store_true', default=None, help="If set, Microsoft Edge TTS is used (requires edge-tts package).")
 
 
 def checkArgs(argparser, args):
-    if not args.use_say and not args.use_amazon and args.use_google_key is None:
-        print('ERROR: You have to provide one of the arguments `--use-say`, `--use-amazon` or `--use-google-key`\n')
+    if not args.use_say and not args.use_amazon and args.use_google_key is None and not args.use_edge:
+        print('ERROR: You have to provide one of the arguments `--use-say`, `--use-amazon`, `--use-google-key` or `--use-edge`\n')
         argparser.print_help()
         sys.exit(2)
     if args.use_say:
@@ -72,6 +84,14 @@ def checkArgs(argparser, args):
         checkLanguage(googleVoiceByLang, args.lang, argparser)
     if args.use_amazon:
         checkLanguage(amazonVoiceByLang, args.lang, argparser)
+    if args.use_edge:
+        checkLanguage(edgeVoiceByLang, args.lang, argparser)
+        try:
+            import edge_tts
+        except ImportError:
+            print('ERROR: edge-tts package is not installed. Install it with: pip install edge-tts\n')
+            sys.exit(2)
+
 
 def checkLanguage(dictionary, lang, argparser):
     if lang not in dictionary:
@@ -81,10 +101,10 @@ def checkLanguage(dictionary, lang, argparser):
 
 
 def textToSpeechUsingArgs(text, targetFile, args):
-    textToSpeech(text, targetFile, lang=args.lang, useAmazon=args.use_amazon, useGoogleKey=args.use_google_key)
+    textToSpeech(text, targetFile, lang=args.lang, useAmazon=args.use_amazon, useGoogleKey=args.use_google_key, useEdge=args.use_edge)
 
 
-def textToSpeech(text, targetFile, lang='de', useAmazon=False, useGoogleKey=None):
+def textToSpeech(text, targetFile, lang='de', useAmazon=False, useGoogleKey=None, useEdge=False):
     print('\nGenerating: ' + targetFile + ' - ' + text)
     if useAmazon:
         response = subprocess.check_output(['aws', 'polly', 'synthesize-speech', '--output-format', 'mp3',
@@ -111,6 +131,15 @@ def textToSpeech(text, targetFile, lang='de', useAmazon=False, useGoogleKey=None
 
         with open(targetFile, 'wb') as f:
             f.write(mp3Data)
+    elif useEdge:
+        import asyncio
+        import edge_tts
+        
+        async def generate_speech():
+            communicate = edge_tts.Communicate(text, edgeVoiceByLang[lang])
+            await communicate.save(targetFile)
+        
+        asyncio.run(generate_speech())
     else:
         subprocess.call([ 'say', '-v', sayVoiceByLang[lang], '-o', 'temp.aiff', text ])
         subprocess.call([ 'ffmpeg', '-y', '-i', 'temp.aiff', '-acodec', 'libmp3lame', '-ab', '128k', '-ac', '1', targetFile ])
@@ -146,7 +175,7 @@ if __name__ == '__main__':
     checkArgs(argparser, args)
 
     if os.path.exists(args.output):
-        print('ERROR: Output file already exists: ' + os.path.abspath(args.output))
+        print('ERROR: Output file alread exists: ' + os.path.abspath(args.output))
         sys.exit(1)
 
 
